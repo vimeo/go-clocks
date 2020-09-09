@@ -1,4 +1,4 @@
-package clocks
+package fake
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 func TestFakeClockBasic(t *testing.T) {
 	t.Parallel()
 	baseTime := time.Now()
-	fc := NewFakeClock(baseTime)
+	fc := NewClock(baseTime)
 
 	expectedTime := baseTime
 
@@ -55,7 +55,7 @@ func TestFakeClockWithAbsoluteWaiter(t *testing.T) {
 	defer cancel()
 
 	baseTime := time.Now()
-	fc := NewFakeClock(baseTime)
+	fc := NewClock(baseTime)
 
 	expectedTime := baseTime
 
@@ -142,7 +142,7 @@ func TestFakeClockWithRelativeWaiter(t *testing.T) {
 	defer cancel()
 
 	baseTime := time.Now()
-	fc := NewFakeClock(baseTime)
+	fc := NewClock(baseTime)
 
 	expectedTime := baseTime
 
@@ -229,7 +229,7 @@ func TestFakeClockWithRelativeWaiterWithCancel(t *testing.T) {
 	defer cancel()
 
 	baseTime := time.Now()
-	fc := NewFakeClock(baseTime)
+	fc := NewClock(baseTime)
 
 	expectedTime := baseTime
 
@@ -314,7 +314,7 @@ func TestFakeClockWithAbsoluteWaiterWithCancel(t *testing.T) {
 	defer cancel()
 
 	baseTime := time.Now()
-	fc := NewFakeClock(baseTime)
+	fc := NewClock(baseTime)
 
 	expectedTime := baseTime
 
