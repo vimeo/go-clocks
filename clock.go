@@ -1,3 +1,16 @@
+// Package clocks provides the Clock interface and two implementations: the
+// defaultClock implementation (returned by DefaultClock()) and the FakeClock
+// (returned by NewFakeClock())
+//
+// defaultClock should always be used within production, as it is a trivial
+// wrapper around the real clock-derived functions in the time package of the
+// Go standard library.
+//
+// FakeClock is present for use in tests, with some helpers for useful
+// synchronization, such as AwaitSleepers() which lets a test goroutine block
+// until some number of other goroutines are sleeping.
+// See the documentation on the individual methods of FakeClock for more
+// specific documentation.
 package clocks
 
 import (
