@@ -25,9 +25,8 @@ func (c defaultClock) SleepFor(ctx context.Context, d time.Duration) bool {
 	select {
 	case <-t.C:
 	case <-ctx.Done():
-		if !t.Stop() {
-			<-t.C
-		}
+		// Just stop the timer, it'll get GC'd either way.
+		t.Stop()
 		return false
 	}
 	return true
