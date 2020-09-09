@@ -1,4 +1,4 @@
-package clocks
+package fake
 
 import (
 	"context"
@@ -6,10 +6,10 @@ import (
 	"time"
 )
 
-// FakeClock implements the Clock interface, with helpful primitives for
+// Clock implements the clocks.Clock interface, with helpful primitives for
 // testing and skipping through timestamps without having to actually sleep in
 // the test.
-type FakeClock struct {
+type Clock struct {
 	mu      sync.Mutex
 	current time.Time
 	// sleepers contains a map from a channel on which that
@@ -31,9 +31,9 @@ type FakeClock struct {
 	sleepersAggregate int
 }
 
-// NewFakeClock returns an initialized FakeClock instance.
-func NewFakeClock(initialTime time.Time) *FakeClock {
-	fc := FakeClock{
+// NewClock returns an initialized Clock instance.
+func NewClock(initialTime time.Time) *Clock {
+	fc := Clock{
 		current:  initialTime,
 		sleepers: map[chan<- struct{}]time.Time{},
 		cond:     sync.Cond{},
@@ -43,7 +43,7 @@ func NewFakeClock(initialTime time.Time) *FakeClock {
 }
 
 // returns the number of sleepers awoken
-func (f *FakeClock) setClockLocked(t time.Time) int {
+func (f *Clock) setClockLocked(t time.Time) int {
 	awoken := 0
 	for ch, target := range f.sleepers {
 		if target.Sub(t) <= 0 {
@@ -59,7 +59,7 @@ func (f *FakeClock) setClockLocked(t time.Time) int {
 }
 
 // SetClock skips the FakeClock to the specified time (forward or backwards)
-func (f *FakeClock) SetClock(t time.Time) int {
+func (f *Clock) SetClock(t time.Time) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.setClockLocked(t)
@@ -67,7 +67,7 @@ func (f *FakeClock) SetClock(t time.Time) int {
 
 // Advance skips the FakeClock forward by the specified duration (backwards if
 // negative)
-func (f *FakeClock) Advance(dur time.Duration) int {
+func (f *Clock) Advance(dur time.Duration) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	t := f.current.Add(dur)
@@ -76,7 +76,7 @@ func (f *FakeClock) Advance(dur time.Duration) int {
 
 // NumSleepers returns the number of goroutines waiting in SleepFor and SleepUntil
 // calls.
-func (f *FakeClock) NumSleepers() int {
+func (f *Clock) NumSleepers() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.sleepers)
@@ -84,7 +84,7 @@ func (f *FakeClock) NumSleepers() int {
 
 // NumAggSleepers returns the number of goroutines who have ever slept under
 // SleepFor and SleepUntil calls.
-func (f *FakeClock) NumAggSleepers() int {
+func (f *Clock) NumAggSleepers() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.sleepersAggregate
@@ -92,7 +92,7 @@ func (f *FakeClock) NumAggSleepers() int {
 
 // NumSleepAborts returns the number of calls to SleepFor and SleepUntil which
 // have ended prematurely due to canceled contexts.
-func (f *FakeClock) NumSleepAborts() int {
+func (f *Clock) NumSleepAborts() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.sleepAborts
@@ -100,7 +100,7 @@ func (f *FakeClock) NumSleepAborts() int {
 
 // Sleepers returns the number of goroutines waiting in SleepFor and SleepUntil
 // calls.
-func (f *FakeClock) Sleepers() []time.Time {
+func (f *Clock) Sleepers() []time.Time {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := make([]time.Time, 0, len(f.sleepers))
@@ -111,7 +111,7 @@ func (f *FakeClock) Sleepers() []time.Time {
 }
 
 // AwaitSleepers waits until the number of sleepers exceeds its argument
-func (f *FakeClock) AwaitSleepers(n int) {
+func (f *Clock) AwaitSleepers(n int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for len(f.sleepers) < n {
@@ -121,7 +121,7 @@ func (f *FakeClock) AwaitSleepers(n int) {
 
 // AwaitAggSleepers waits until the aggregate number of sleepers exceeds its
 // argument
-func (f *FakeClock) AwaitAggSleepers(n int) {
+func (f *Clock) AwaitAggSleepers(n int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for f.sleepersAggregate < n {
@@ -131,7 +131,7 @@ func (f *FakeClock) AwaitAggSleepers(n int) {
 
 // AwaitSleepAborts waits until the number of aborted sleepers exceeds its
 // argument
-func (f *FakeClock) AwaitSleepAborts(n int) {
+func (f *Clock) AwaitSleepAborts(n int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for f.sleepAborts < n {
@@ -141,14 +141,14 @@ func (f *FakeClock) AwaitSleepAborts(n int) {
 
 // Wakeups returns the number of sleepers that have been awoken (useful for
 // verifying that nothing was woken up when advancing time)
-func (f *FakeClock) Wakeups() int {
+func (f *Clock) Wakeups() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.wakeups
 }
 
 // Now implements Clock.Now(), returning the current time for this FakeClock.
-func (f *FakeClock) Now() time.Time {
+func (f *Clock) Now() time.Time {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.current
@@ -157,11 +157,11 @@ func (f *FakeClock) Now() time.Time {
 
 // Until implements Clock.Now(), returning the time-difference between the
 // timestamp argument and the current timestamp for the clock.
-func (f *FakeClock) Until(t time.Time) time.Duration {
+func (f *Clock) Until(t time.Time) time.Duration {
 	return t.Sub(f.Now())
 }
 
-func (f *FakeClock) setAbsoluteWaiter(until time.Time) chan struct{} {
+func (f *Clock) setAbsoluteWaiter(until time.Time) chan struct{} {
 	ch := make(chan struct{})
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -176,7 +176,7 @@ func (f *FakeClock) setAbsoluteWaiter(until time.Time) chan struct{} {
 	return ch
 }
 
-func (f *FakeClock) removeWaiter(ch chan struct{}, abort bool) {
+func (f *Clock) removeWaiter(ch chan struct{}, abort bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	// If the channel is present, and this was an abort, increment the
@@ -191,7 +191,7 @@ func (f *FakeClock) removeWaiter(ch chan struct{}, abort bool) {
 // SleepUntil blocks until either ctx expires or until arrives.
 // Return value is false if context-cancellation/expiry prompted an
 // early return
-func (f *FakeClock) SleepUntil(ctx context.Context, until time.Time) (success bool) {
+func (f *Clock) SleepUntil(ctx context.Context, until time.Time) (success bool) {
 	ch := f.setAbsoluteWaiter(until)
 	defer func() { f.removeWaiter(ch, !success) }()
 	select {
@@ -202,7 +202,7 @@ func (f *FakeClock) SleepUntil(ctx context.Context, until time.Time) (success bo
 	}
 }
 
-func (f *FakeClock) setRelativeWaiter(dur time.Duration) chan struct{} {
+func (f *Clock) setRelativeWaiter(dur time.Duration) chan struct{} {
 	ch := make(chan struct{})
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -213,7 +213,7 @@ func (f *FakeClock) setRelativeWaiter(dur time.Duration) chan struct{} {
 }
 
 // SleepFor is the relative-time equivalent of SleepUntil.
-func (f *FakeClock) SleepFor(ctx context.Context, dur time.Duration) (success bool) {
+func (f *Clock) SleepFor(ctx context.Context, dur time.Duration) (success bool) {
 	if dur <= 0 {
 		return true
 	}
