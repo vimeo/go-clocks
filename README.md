@@ -1,6 +1,7 @@
 
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/vimeo/go-clocks)](https://pkg.go.dev/github.com/vimeo/go-clocks)
 ![Go Actions](https://github.com/vimeo/go-clocks/workflows/Go/badge.svg)
+[![Go Report Card](https://goreportcard.com/badge/github.com/vimeo/go-clocks)](https://goreportcard.com/report/github.com/vimeo/go-clocks)
 
 ## go-clocks provides a modern context-aware clock interface
 
