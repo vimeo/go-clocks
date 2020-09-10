@@ -11,6 +11,11 @@
 // until some number of other goroutines are sleeping.
 // See the documentation on the individual methods of fake.Clock for more
 // specific documentation.
+//
+// The offset subpackage contains an offset.Clock type which simply adds a
+// constant offset to any interactions with an absolute time. This type is most
+// useful for simulating clock-skew/unsynchronization in combination with the
+// fake-clock.
 package clocks
 
 import (
