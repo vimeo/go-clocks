@@ -79,4 +79,28 @@ func TestOffsetClock(t *testing.T) {
 			t.Errorf("unexpected return value from SleepUntil; %t; expected true", v)
 		}
 	}
+	// verify AfterFunc doesn't do any adjustment
+	{
+		expectedExecInner := base.Add(3 * time.Hour)
+		ch := make(chan bool)
+		c.AfterFunc(time.Hour, func() {
+			close(ch)
+		})
+
+		if sl := inner.RegisteredCallbacks(); len(sl) != 1 || !sl[0].Equal(expectedExecInner) {
+			t.Errorf("unexpected sleepers: %v; expected 1 with %s", sl, expectedExecInner)
+		}
+
+		select {
+		case v := <-ch:
+			t.Fatalf("SleepFor exited prematurely with value %t", v)
+		default:
+		}
+
+		if awoken := inner.Advance(time.Hour); awoken != 1 {
+			t.Errorf("unexpected number of awoken waiters: %d; expected 1", awoken)
+		}
+
+		<-ch
+	}
 }
