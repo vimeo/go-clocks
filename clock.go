@@ -50,6 +50,10 @@ func (c defaultClock) SleepFor(ctx context.Context, d time.Duration) bool {
 	return true
 }
 
+func (c defaultClock) AfterFunc(d time.Duration, f func()) StopTimer {
+	return time.AfterFunc(d, f)
+}
+
 // DefaultClock returns a clock that minimally wraps the `time` package
 func DefaultClock() Clock {
 	return defaultClock{}
@@ -70,4 +74,10 @@ type Clock interface {
 	// default implementation, this is the lower-level method, but other
 	// implementations may disagree.
 	SleepFor(ctx context.Context, dur time.Duration) bool
+
+	// AfterFunc is a time-relative primitive, equivalent to time.AfterFunc.
+	// (in the default clock, it *is* delegated directly to time.AfterFunc)
+	// The callback function f will be executed after the interval d has
+	// elapsed, unless the returned timer's Stop() method is called first.
+	AfterFunc(d time.Duration, f func()) StopTimer
 }
