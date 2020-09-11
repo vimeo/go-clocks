@@ -2,6 +2,7 @@ package fake
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -390,4 +391,266 @@ func TestFakeClockWithAbsoluteWaiterWithCancel(t *testing.T) {
 	if sa := fc.NumSleepAborts(); sa != 1 {
 		t.Errorf("unexpected abort-count: %d; expected 1", sa)
 	}
+}
+
+func TestFakeClockAfterFuncTimeWake(t *testing.T) {
+	t.Parallel()
+	baseTime := time.Now()
+	fc := NewClock(baseTime)
+
+	expectedTime := baseTime
+
+	aggCallbackWaitCh := make(chan struct{})
+	go func() {
+		defer close(aggCallbackWaitCh)
+		fc.AwaitAggCallbacks(1)
+	}()
+	regCallbackWaitCh := make(chan struct{})
+	go func() {
+		defer close(regCallbackWaitCh)
+		fc.AwaitRegisteredCallbacks(1)
+	}()
+	runtime.Gosched()
+
+	if fn := fc.Now(); !fn.Equal(baseTime) {
+		t.Errorf("mismatched baseTime(%s) and unincremented Now()(%s)", baseTime, fn)
+	}
+	// make sure we get the same value a second time
+	if fn := fc.Now(); !fn.Equal(baseTime) {
+		t.Errorf("mismatched baseTime(%s) and unincremented Now()(%s)", baseTime, fn)
+	}
+
+	if regCBs := fc.NumRegisteredCallbacks(); regCBs != 0 {
+		t.Errorf("unexpected registered callbacks: %d; expected 0", regCBs)
+	}
+	if regCBs := fc.NumAggCallbacks(); regCBs != 0 {
+		t.Errorf("unexpected aggregate registered callbacks: %d; expected 0", regCBs)
+	}
+	if cbExecs := fc.NumCallbackExecs(); cbExecs != 0 {
+		t.Errorf("unexpected executed callbacks: %d; expected 0", cbExecs)
+	}
+	cbRun := make(chan struct{})
+	timerHandle := fc.AfterFunc(time.Hour, func() { close(cbRun) })
+
+	<-aggCallbackWaitCh
+	<-regCallbackWaitCh
+
+	if regCBs := fc.NumRegisteredCallbacks(); regCBs != 1 {
+		t.Errorf("unexpected registered callbacks: %d; expected 1", regCBs)
+	}
+	if regCBs := fc.NumAggCallbacks(); regCBs != 1 {
+		t.Errorf("unexpected aggregate registered callbacks: %d; expected 1", regCBs)
+	}
+
+	if wakers := fc.Advance(time.Minute); wakers != 0 {
+		t.Errorf("unexpected wakers from advancing 1 minute(%d); expected 0", wakers)
+	}
+	if cbExecs := fc.NumCallbackExecs(); cbExecs != 0 {
+		t.Errorf("unexpected executed callbacks: %d; expected 0", cbExecs)
+	}
+
+	if cbWakes := fc.RegisteredCallbacks(); len(cbWakes) != 1 || !cbWakes[0].Equal(
+		baseTime.Add(time.Hour)) {
+		t.Errorf("unexpected scheduled exec time for callback: %v, expected %s",
+			cbWakes, baseTime.Add(time.Hour))
+	}
+	select {
+	case <-cbRun:
+		t.Errorf("callback ran when canceled before time advanced to exec-point")
+	default:
+	}
+
+	expectedTime = expectedTime.Add(time.Minute)
+	if fn := fc.Now(); !fn.Equal(expectedTime) {
+		t.Errorf("mismatched baseTime(%s) and unincremented Now()(%s)", expectedTime, fn)
+	}
+
+	expectedTime = expectedTime.Add(time.Hour)
+	if wakers := fc.SetClock(expectedTime); wakers != 1 {
+		t.Errorf("unexpected wakers from advancing 1 hour(%d); expected 1", wakers)
+	}
+
+	// Wait for the callback to complete
+	<-cbRun
+
+	if cbExecs := fc.NumCallbackExecs(); cbExecs != 1 {
+		t.Errorf("unexpected executed callbacks: %d; expected 1", cbExecs)
+	}
+
+	if zeroDur := fc.Until(expectedTime); zeroDur != 0 {
+		t.Errorf("expected zero duration, got %s", zeroDur)
+	}
+
+	if wu := fc.Wakeups(); wu != 0 {
+		t.Errorf("unexpected wakeup-count: %d; expected 0", wu)
+	}
+	if sa := fc.NumSleepAborts(); sa != 0 {
+		t.Errorf("unexpected abort-count: %d; expected 0", sa)
+	}
+	if timerHandle.Stop() {
+		t.Errorf("stop returned true after callback execution")
+	}
+
+}
+func TestFakeClockAfterFuncTimeAbort(t *testing.T) {
+	t.Parallel()
+	baseTime := time.Now()
+	fc := NewClock(baseTime)
+
+	aggCallbackWaitCh := make(chan struct{})
+	go func() {
+		defer close(aggCallbackWaitCh)
+		fc.AwaitAggCallbacks(1)
+	}()
+	regCallbackWaitCh := make(chan struct{})
+	go func() {
+		defer close(regCallbackWaitCh)
+		fc.AwaitRegisteredCallbacks(1)
+	}()
+	cancelCBWaitCh := make(chan struct{})
+	go func() {
+		defer close(cancelCBWaitCh)
+		fc.AwaitTimerAborts(1)
+	}()
+
+	runtime.Gosched()
+
+	if fn := fc.Now(); !fn.Equal(baseTime) {
+		t.Errorf("mismatched baseTime(%s) and unincremented Now()(%s)", baseTime, fn)
+	}
+	// make sure we get the same value a second time
+	if fn := fc.Now(); !fn.Equal(baseTime) {
+		t.Errorf("mismatched baseTime(%s) and unincremented Now()(%s)", baseTime, fn)
+	}
+
+	if regCBs := fc.NumRegisteredCallbacks(); regCBs != 0 {
+		t.Errorf("unexpected registered callbacks: %d; expected 0", regCBs)
+	}
+	if regCBs := fc.NumAggCallbacks(); regCBs != 0 {
+		t.Errorf("unexpected aggregate registered callbacks: %d; expected 0", regCBs)
+	}
+	if cbExecs := fc.NumCallbackExecs(); cbExecs != 0 {
+		t.Errorf("unexpected executed callbacks: %d; expected 0", cbExecs)
+	}
+
+	cbRun := make(chan struct{})
+	timerHandle := fc.AfterFunc(time.Hour, func() { close(cbRun) })
+
+	<-aggCallbackWaitCh
+	<-regCallbackWaitCh
+
+	if regCBs := fc.NumRegisteredCallbacks(); regCBs != 1 {
+		t.Errorf("unexpected registered callbacks: %d; expected 1", regCBs)
+	}
+	if regCBs := fc.NumAggCallbacks(); regCBs != 1 {
+		t.Errorf("unexpected aggregate registered callbacks: %d; expected 1", regCBs)
+	}
+
+	if wakers := fc.Advance(time.Minute); wakers != 0 {
+		t.Errorf("unexpected wakers from advancing 1 minute(%d); expected 0", wakers)
+	}
+	if cbExecs := fc.NumCallbackExecs(); cbExecs != 0 {
+		t.Errorf("unexpected executed callbacks: %d; expected 0", cbExecs)
+	}
+
+	if cbWakes := fc.RegisteredCallbacks(); len(cbWakes) != 1 || !cbWakes[0].Equal(
+		baseTime.Add(time.Hour)) {
+		t.Errorf("unexpected scheduled exec time for callback: %v, expected %s",
+			cbWakes, baseTime.Add(time.Hour))
+	}
+
+	if !timerHandle.Stop() {
+		t.Errorf("callback ran prematurely; stop returned false")
+	}
+	if timerHandle.Stop() {
+		t.Errorf("stop returned true after previous stop")
+	}
+
+	<-cancelCBWaitCh
+
+	select {
+	case <-cbRun:
+		t.Errorf("callback ran when canceled before time advanced to exec-point")
+	default:
+	}
+
+	if cbWakes := fc.RegisteredCallbacks(); len(cbWakes) != 0 {
+		t.Errorf("unexpected scheduled exec times for callback(s): %v, none expected",
+			cbWakes)
+	}
+	if cbExecs := fc.NumCallbackExecs(); cbExecs != 0 {
+		t.Errorf("unexpected executed callbacks: %d; expected 0", cbExecs)
+	}
+	if cbAborts := fc.NumTimerAborts(); cbAborts != 1 {
+		t.Errorf("unexpected aborted callbacks: %d; expected 1", cbAborts)
+	}
+
+	if wu := fc.Wakeups(); wu != 0 {
+		t.Errorf("unexpected wakeup-count: %d; expected 0", wu)
+	}
+	if sa := fc.NumSleepAborts(); sa != 0 {
+		t.Errorf("unexpected abort-count: %d; expected 0", sa)
+	}
+
+}
+
+func TestFakeClockAfterFuncNegDur(t *testing.T) {
+	t.Parallel()
+	baseTime := time.Now()
+	fc := NewClock(baseTime)
+
+	aggCallbackWaitCh := make(chan struct{})
+	go func() {
+		defer close(aggCallbackWaitCh)
+		fc.AwaitAggCallbacks(1)
+	}()
+
+	if regCBs := fc.NumRegisteredCallbacks(); regCBs != 0 {
+		t.Errorf("unexpected registered callbacks: %d; expected 0", regCBs)
+	}
+	if regCBs := fc.NumAggCallbacks(); regCBs != 0 {
+		t.Errorf("unexpected aggregate registered callbacks: %d; expected 0", regCBs)
+	}
+	if cbExecs := fc.NumCallbackExecs(); cbExecs != 0 {
+		t.Errorf("unexpected executed callbacks: %d; expected 0", cbExecs)
+	}
+
+	cbRun := make(chan struct{})
+	timerHandle := fc.AfterFunc(-time.Hour, func() { close(cbRun) })
+	<-aggCallbackWaitCh
+	<-cbRun
+
+	if regCBs := fc.NumRegisteredCallbacks(); regCBs != 0 {
+		t.Errorf("unexpected registered callbacks: %d; expected 0", regCBs)
+	}
+	if regCBs := fc.NumAggCallbacks(); regCBs != 1 {
+		t.Errorf("unexpected aggregate registered callbacks: %d; expected 1", regCBs)
+	}
+
+	if cbExecs := fc.NumCallbackExecs(); cbExecs != 1 {
+		t.Errorf("unexpected executed callbacks: %d; expected 1", cbExecs)
+	}
+
+	if timerHandle.Stop() {
+		t.Errorf("stop returned true")
+	}
+
+	if cbWakes := fc.RegisteredCallbacks(); len(cbWakes) != 0 {
+		t.Errorf("unexpected scheduled exec times for callback(s): %v, none expected",
+			cbWakes)
+	}
+	if cbExecs := fc.NumCallbackExecs(); cbExecs != 1 {
+		t.Errorf("unexpected executed callbacks: %d; expected 1", cbExecs)
+	}
+	if cbAborts := fc.NumTimerAborts(); cbAborts != 0 {
+		t.Errorf("unexpected aborted callbacks: %d; expected 0", cbAborts)
+	}
+
+	if wu := fc.Wakeups(); wu != 0 {
+		t.Errorf("unexpected wakeup-count: %d; expected 0", wu)
+	}
+	if sa := fc.NumSleepAborts(); sa != 0 {
+		t.Errorf("unexpected abort-count: %d; expected 0", sa)
+	}
+
 }
