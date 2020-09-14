@@ -42,6 +42,13 @@ func (o *Clock) SleepFor(ctx context.Context, dur time.Duration) bool {
 	return o.inner.SleepFor(ctx, dur)
 }
 
+// AfterFunc executes function f after duration d, (delegating to the wrapped
+// clock, as the time-argument is relative)
+func (o *Clock) AfterFunc(d time.Duration, f func()) clocks.StopTimer {
+	// relative time, so nothing to do here, just delegate on down.
+	return o.inner.AfterFunc(d, f)
+}
+
 // NewOffsetClock creates an OffsetClock.
 // offset is added to all absolute times
 func NewOffsetClock(inner clocks.Clock, offset time.Duration) *Clock {

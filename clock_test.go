@@ -42,4 +42,10 @@ func TestDefaultClock(t *testing.T) {
 	if v := <-ch; v {
 		t.Errorf("unexpected return value for SleepUntil (and by extension SleepFor): %t; expected false", v)
 	}
+
+	{
+		afCh := make(chan struct{})
+		c.AfterFunc(time.Millisecond, func() { close(afCh) })
+		<-afCh
+	}
 }
