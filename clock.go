@@ -62,6 +62,11 @@ func (c defaultClock) ContextWithTimeout(ctx context.Context, d time.Duration) (
 	return context.WithTimeout(ctx, d)
 }
 
+func (c defaultClock) NewTimer(d time.Duration) Timer {
+	t := time.NewTimer(d)
+	return &defaultTimer{Timer: t}
+}
+
 // DefaultClock returns a clock that minimally wraps the `time` package
 func DefaultClock() Clock {
 	return defaultClock{}
@@ -103,4 +108,14 @@ type Clock interface {
 	// uses the clock to determine the when the timeout has elapsed. Cause is
 	// ignored in Go 1.20 and earlier.
 	ContextWithTimeoutCause(ctx context.Context, d time.Duration, cause error) (context.Context, context.CancelFunc)
+
+	// NewTimer returns a Timer implementation which will fire after at
+	// least the specified duration [d]. The Ch() method returns a channel,
+	// and should be called inline with the receive or select case.
+	//
+	// Timers are most useful in select/case blocks. For simple cases,
+	// SleepFor should be preferred.
+	//
+	// Stop() is inherently racy. Be wary of the return value.
+	NewTimer(d time.Duration) Timer
 }
