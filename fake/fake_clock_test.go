@@ -432,6 +432,7 @@ func TestFakeClockAfterFuncTimeWake(t *testing.T) {
 	cbRun := make(chan struct{})
 	timerHandle := fc.AfterFunc(time.Hour, func() { close(cbRun) })
 
+	fc.WaitAfterFuncs()
 	<-aggCallbackWaitCh
 	<-regCallbackWaitCh
 
@@ -536,8 +537,10 @@ func TestFakeClockAfterFuncTimeAbort(t *testing.T) {
 	cbRun := make(chan struct{})
 	timerHandle := fc.AfterFunc(time.Hour, func() { close(cbRun) })
 
+	fc.WaitAfterFuncs()
 	<-aggCallbackWaitCh
 	<-regCallbackWaitCh
+	fc.WaitAfterFuncs()
 
 	if regCBs := fc.NumRegisteredCallbacks(); regCBs != 1 {
 		t.Errorf("unexpected registered callbacks: %d; expected 1", regCBs)
@@ -617,6 +620,7 @@ func TestFakeClockAfterFuncNegDur(t *testing.T) {
 
 	cbRun := make(chan struct{})
 	timerHandle := fc.AfterFunc(-time.Hour, func() { close(cbRun) })
+	fc.WaitAfterFuncs()
 	<-aggCallbackWaitCh
 	<-cbRun
 
