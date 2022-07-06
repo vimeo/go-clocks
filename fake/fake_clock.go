@@ -81,11 +81,11 @@ func (f *Clock) setClockLocked(t time.Time, cbRunningWG *sync.WaitGroup) int {
 		if target.Sub(t) <= 0 {
 			cbRunningWG.Add(1)
 			f.cbsWG.Add(1)
-			go func() {
+			go func(st *stopTimer) {
 				defer f.cbsWG.Done()
 				cbRunningWG.Done()
-				s.f()
-			}()
+				st.f()
+			}(s)
 			delete(f.cbs, s)
 			cbsRun++
 		}
