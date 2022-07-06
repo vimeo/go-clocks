@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"runtime"
+	"sort"
 	"testing"
 	"time"
 )
@@ -398,6 +399,13 @@ func TestFakeClockAfterFuncTimeWake(t *testing.T) {
 	baseTime := time.Now()
 	fc := NewClock(baseTime)
 
+	// Register a few extra afterfuncs to repro a bug in setClockLocked
+	// where we were capturing a loop variable
+	for z := 0; z < 20; z++ {
+		st := fc.AfterFunc(time.Hour*3, func() {})
+		defer st.Stop()
+	}
+
 	expectedTime := baseTime
 
 	aggCallbackWaitCh := make(chan struct{})
@@ -420,11 +428,11 @@ func TestFakeClockAfterFuncTimeWake(t *testing.T) {
 		t.Errorf("mismatched baseTime(%s) and unincremented Now()(%s)", baseTime, fn)
 	}
 
-	if regCBs := fc.NumRegisteredCallbacks(); regCBs != 0 {
-		t.Errorf("unexpected registered callbacks: %d; expected 0", regCBs)
+	if regCBs := fc.NumRegisteredCallbacks(); regCBs != 20 {
+		t.Errorf("unexpected registered callbacks: %d; expected 20", regCBs)
 	}
-	if regCBs := fc.NumAggCallbacks(); regCBs != 0 {
-		t.Errorf("unexpected aggregate registered callbacks: %d; expected 0", regCBs)
+	if regCBs := fc.NumAggCallbacks(); regCBs != 20 {
+		t.Errorf("unexpected aggregate registered callbacks: %d; expected 20", regCBs)
 	}
 	if cbExecs := fc.NumCallbackExecs(); cbExecs != 0 {
 		t.Errorf("unexpected executed callbacks: %d; expected 0", cbExecs)
@@ -436,11 +444,11 @@ func TestFakeClockAfterFuncTimeWake(t *testing.T) {
 	<-aggCallbackWaitCh
 	<-regCallbackWaitCh
 
-	if regCBs := fc.NumRegisteredCallbacks(); regCBs != 1 {
-		t.Errorf("unexpected registered callbacks: %d; expected 1", regCBs)
+	if regCBs := fc.NumRegisteredCallbacks(); regCBs != 21 {
+		t.Errorf("unexpected registered callbacks: %d; expected 21", regCBs)
 	}
-	if regCBs := fc.NumAggCallbacks(); regCBs != 1 {
-		t.Errorf("unexpected aggregate registered callbacks: %d; expected 1", regCBs)
+	if regCBs := fc.NumAggCallbacks(); regCBs != 21 {
+		t.Errorf("unexpected aggregate registered callbacks: %d; expected 21", regCBs)
 	}
 
 	if wakers := fc.Advance(time.Minute); wakers != 0 {
@@ -450,7 +458,9 @@ func TestFakeClockAfterFuncTimeWake(t *testing.T) {
 		t.Errorf("unexpected executed callbacks: %d; expected 0", cbExecs)
 	}
 
-	if cbWakes := fc.RegisteredCallbacks(); len(cbWakes) != 1 || !cbWakes[0].Equal(
+	cbWakes := fc.RegisteredCallbacks()
+	sort.Slice(cbWakes, func(i, j int) bool { return cbWakes[i].Before(cbWakes[j]) })
+	if len(cbWakes) != 21 || !cbWakes[0].Equal(
 		baseTime.Add(time.Hour)) {
 		t.Errorf("unexpected scheduled exec time for callback: %v, expected %s",
 			cbWakes, baseTime.Add(time.Hour))
