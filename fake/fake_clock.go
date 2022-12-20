@@ -20,35 +20,35 @@ type Clock struct {
 	// be removed from the map.
 	sleepers map[chan<- struct{}]time.Time
 	// cbs contains a map from a *stopTimer containing the callback
-	// function to the wakeup time. (protected by mu)
+	// function to the wakeup time. (protected by mu).
 	cbs map[*stopTimer]time.Time
 
 	// cbsWG tracks callback goroutines configured from AfterFunc (no mutex
-	// protection necessary)
+	// protection necessary).
 	cbsWG sync.WaitGroup
 
 	// cond is broadcasted() upon any sleep or wakeup event (mutations to
 	// sleepers or cbs).
 	cond sync.Cond
 
-	// counter tracking the number of wakeups (protected by mu)
+	// counter tracking the number of wakeups (protected by mu).
 	wakeups int
 
-	// callbackExecs tracking the number of callback executions (protected by mu)
+	// callbackExecs tracking the number of callback executions (protected by mu).
 	callbackExecs int
 
-	// counter tracking the number of canceled sleeps (protected by mu)
+	// counter tracking the number of canceled sleeps (protected by mu).
 	sleepAborts int
 
-	// counter tracking the number of canceled timers (including AfterFuncs) (protected by mu)
+	// counter tracking the number of canceled timers (including AfterFuncs) (protected by mu).
 	timerAborts int
 
 	// counter tracking the number of sleepers who have ever gone to sleep
-	// (protected by mu)
+	// (protected by mu).
 	sleepersAggregate int
 
 	// counter tracking the number of callbacks that have ever been
-	// registered (via AfterFunc) (protected by mu)
+	// registered (via AfterFunc) (protected by mu).
 	callbacksAggregate int
 }
 
@@ -66,7 +66,7 @@ func NewClock(initialTime time.Time) *Clock {
 	return &fc
 }
 
-// returns the number of sleepers awoken
+// returns the number of sleepers awoken.
 func (f *Clock) setClockLocked(t time.Time, cbRunningWG *sync.WaitGroup) int {
 	awoken := 0
 	for ch, target := range f.sleepers {
@@ -97,9 +97,10 @@ func (f *Clock) setClockLocked(t time.Time, cbRunningWG *sync.WaitGroup) int {
 	return awoken + cbsRun
 }
 
-// SetClock skips the FakeClock to the specified time (forward or backwards)
-// The goroutines running newly-spawned functions scheduled with AfterFunc are
-// guaranteed to have scheduled by the time this function returns.
+// SetClock skips the FakeClock to the specified time (forward or backwards) The
+// goroutines running newly-spawned functions scheduled with AfterFunc are
+// guaranteed to have scheduled by the time this function returns.  It returns
+// the number of sleepers awoken.
 func (f *Clock) SetClock(t time.Time) int {
 	cbsWG := sync.WaitGroup{}
 	// Wait for callbacks to schedule before returning (but after the mutex
@@ -111,9 +112,9 @@ func (f *Clock) SetClock(t time.Time) int {
 }
 
 // Advance skips the FakeClock forward by the specified duration (backwards if
-// negative)
-// The goroutines running newly-spawned functions scheduled with AfterFunc are
-// guaranteed to have scheduled by the time this function returns.
+// negative) The goroutines running newly-spawned functions scheduled with
+// AfterFunc are guaranteed to have scheduled by the time this function returns.
+// It returns number of sleepers awoken.
 func (f *Clock) Advance(dur time.Duration) int {
 	cbsWG := sync.WaitGroup{}
 	// Wait for callbacks to schedule before returning (but after the mutex
@@ -172,7 +173,8 @@ func (f *Clock) RegisteredCallbacks() []time.Time {
 	return out
 }
 
-// AwaitSleepers waits until the number of sleepers exceeds its argument
+// AwaitSleepers waits until the number of sleepers equals or exceeds its
+// argument.
 func (f *Clock) AwaitSleepers(n int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -181,8 +183,8 @@ func (f *Clock) AwaitSleepers(n int) {
 	}
 }
 
-// AwaitAggSleepers waits until the aggregate number of sleepers exceeds its
-// argument
+// AwaitAggSleepers waits until the aggregate number of sleepers equals or
+// exceeds its argument.
 func (f *Clock) AwaitAggSleepers(n int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -191,8 +193,8 @@ func (f *Clock) AwaitAggSleepers(n int) {
 	}
 }
 
-// AwaitSleepAborts waits until the number of aborted sleepers exceeds its
-// argument
+// AwaitSleepAborts waits until the number of aborted sleepers equals or exceeds
+// its argument.
 func (f *Clock) AwaitSleepAborts(n int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -202,7 +204,7 @@ func (f *Clock) AwaitSleepAborts(n int) {
 }
 
 // Wakeups returns the number of sleepers that have been awoken (useful for
-// verifying that nothing was woken up when advancing time)
+// verifying that nothing was woken up when advancing time).
 func (f *Clock) Wakeups() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -252,7 +254,7 @@ func (f *Clock) removeWaiter(ch chan struct{}, abort bool) {
 
 // SleepUntil blocks until either ctx expires or until arrives.
 // Return value is false if context-cancellation/expiry prompted an
-// early return
+// early return.
 func (f *Clock) SleepUntil(ctx context.Context, until time.Time) (success bool) {
 	ch := f.setAbsoluteWaiter(until)
 	defer func() { f.removeWaiter(ch, !success) }()
@@ -317,7 +319,7 @@ type doaStopTimer struct{}
 func (doaStopTimer) Stop() bool { return false }
 
 // AfterFunc runs cb after time duration has "elapsed" (by this clock's
-// definition of "elapsed")
+// definition of "elapsed").
 func (f *Clock) AfterFunc(d time.Duration, cb func()) clocks.StopTimer {
 	s := &stopTimer{f: cb, c: f}
 	f.mu.Lock()
@@ -350,7 +352,7 @@ func (f *Clock) NumCallbackExecs() int {
 }
 
 // NumAggCallbacks returns the aggregate number of registered callbacks
-// (via AfterFunc)
+// (via AfterFunc).
 func (f *Clock) NumAggCallbacks() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -358,7 +360,7 @@ func (f *Clock) NumAggCallbacks() int {
 }
 
 // NumTimerAborts returns the aggregate number of registered callbacks (and
-// timers) that have been canceled
+// timers) that have been canceled.
 func (f *Clock) NumTimerAborts() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -366,7 +368,7 @@ func (f *Clock) NumTimerAborts() int {
 }
 
 // AwaitAggCallbacks waits until the aggregate number of registered callbacks
-// (via AfterFunc) exceeds its argument
+// (via AfterFunc) exceeds its argument.
 func (f *Clock) AwaitAggCallbacks(n int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -376,7 +378,7 @@ func (f *Clock) AwaitAggCallbacks(n int) {
 }
 
 // NumRegisteredCallbacks returns the aggregate number of registered callbacks
-// (via AfterFunc)
+// (via AfterFunc).
 func (f *Clock) NumRegisteredCallbacks() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -384,7 +386,7 @@ func (f *Clock) NumRegisteredCallbacks() int {
 }
 
 // AwaitRegisteredCallbacks waits until the number of registered callbacks
-// (via AfterFunc) exceeds its argument
+// (via AfterFunc) exceeds its argument.
 func (f *Clock) AwaitRegisteredCallbacks(n int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -394,7 +396,7 @@ func (f *Clock) AwaitRegisteredCallbacks(n int) {
 }
 
 // AwaitTimerAborts waits until the aggregate number of registered callbacks
-// (via AfterFunc) exceeds its argument
+// (via AfterFunc) exceeds its argument.
 func (f *Clock) AwaitTimerAborts(n int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

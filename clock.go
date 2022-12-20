@@ -68,7 +68,7 @@ type Clock interface {
 	Until(time.Time) time.Duration
 	// SleepUntil blocks until either ctx expires or until arrives.
 	// Return value is false if context-cancellation/expiry prompted an
-	// early return
+	// early return.
 	SleepUntil(ctx context.Context, until time.Time) bool
 	// SleepFor is the relative-time equivalent of SleepUntil. In the
 	// default implementation, this is the lower-level method, but other
