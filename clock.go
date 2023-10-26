@@ -54,6 +54,14 @@ func (c defaultClock) AfterFunc(d time.Duration, f func()) StopTimer {
 	return time.AfterFunc(d, f)
 }
 
+func (c defaultClock) ContextWithDeadline(ctx context.Context, t time.Time) (context.Context, context.CancelFunc) {
+	return context.WithDeadline(ctx, t)
+}
+
+func (c defaultClock) ContextWithTimeout(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, d)
+}
+
 // DefaultClock returns a clock that minimally wraps the `time` package
 func DefaultClock() Clock {
 	return defaultClock{}
@@ -80,4 +88,19 @@ type Clock interface {
 	// The callback function f will be executed after the interval d has
 	// elapsed, unless the returned timer's Stop() method is called first.
 	AfterFunc(d time.Duration, f func()) StopTimer
+
+	// ContextWithDeadline behaves like context.WithDeadline, but it uses the
+	// clock to determine the when the deadline has expired.
+	ContextWithDeadline(ctx context.Context, t time.Time) (context.Context, context.CancelFunc)
+	// ContextWithDeadlineCause behaves like context.WithDeadlineCause, but it
+	// uses the clock to determine the when the deadline has expired. Cause is
+	// ignored in Go 1.20 and earlier.
+	ContextWithDeadlineCause(ctx context.Context, t time.Time, cause error) (context.Context, context.CancelFunc)
+	// ContextWithTimeout behaves like context.WithTimeout, but it uses the
+	// clock to determine the when the timeout has elapsed.
+	ContextWithTimeout(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc)
+	// ContextWithTimeoutCause behaves like context.WithTimeoutCause, but it
+	// uses the clock to determine the when the timeout has elapsed. Cause is
+	// ignored in Go 1.20 and earlier.
+	ContextWithTimeoutCause(ctx context.Context, d time.Duration, cause error) (context.Context, context.CancelFunc)
 }

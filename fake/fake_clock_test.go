@@ -668,3 +668,90 @@ func TestFakeClockAfterFuncNegDur(t *testing.T) {
 	}
 
 }
+
+func TestFakeClockContext(t *testing.T) {
+	t.Run("ContextDeadline", func(t *testing.T) {
+		base := time.Now()
+		c := NewClock(base)
+
+		deadline := base.Add(1)
+		ctx, cancel := c.ContextWithDeadline(context.Background(), deadline)
+		t.Cleanup(cancel)
+
+		ctxDeadline, isSet := ctx.Deadline()
+		if !isSet {
+			t.Errorf("context deadline not set")
+		}
+		if !ctxDeadline.Equal(deadline) {
+			t.Errorf("unexpected context deadline: %v; expected %v", ctxDeadline, deadline)
+		}
+	})
+
+	t.Run("ContextWithDeadlineExceeded", func(t *testing.T) {
+		base := time.Now()
+		c := NewClock(base)
+
+		ctx, cancel := c.ContextWithDeadline(context.Background(), base.Add(1))
+		t.Cleanup(cancel)
+
+		c.Advance(1)
+
+		select {
+		case <-ctx.Done():
+			if ctx.Err() != context.DeadlineExceeded {
+				t.Errorf("unexpected error: %v; expected %v", ctx.Err(), context.DeadlineExceeded)
+			}
+		case <-time.After(time.Second):
+			t.Errorf("context not done after 1 second")
+		}
+	})
+
+	t.Run("ContextWithDeadlineNotExceeded", func(t *testing.T) {
+		base := time.Now()
+		c := NewClock(base)
+
+		ctx, cancel := c.ContextWithDeadline(context.Background(), base.Add(1))
+		t.Cleanup(cancel)
+
+		select {
+		case <-ctx.Done():
+			t.Errorf("context should not be done")
+		default:
+			if ctx.Err() != nil {
+				t.Errorf("unexpected error: %v; expected nil", ctx.Err())
+			}
+		}
+	})
+
+	t.Run("ContextWithTimeoutExceeded", func(t *testing.T) {
+		c := NewClock(time.Now())
+		ctx, cancel := c.ContextWithTimeout(context.Background(), 1)
+		t.Cleanup(cancel)
+
+		c.Advance(1)
+
+		select {
+		case <-ctx.Done():
+			if ctx.Err() != context.DeadlineExceeded {
+				t.Errorf("unexpected error: %v; expected %v", ctx.Err(), context.DeadlineExceeded)
+			}
+		case <-time.After(time.Second):
+			t.Errorf("context not done after 1 second")
+		}
+	})
+
+	t.Run("ContextWithTimeouteNotExceeded", func(t *testing.T) {
+		c := NewClock(time.Now())
+		ctx, cancel := c.ContextWithTimeout(context.Background(), 1)
+		t.Cleanup(cancel)
+
+		select {
+		case <-ctx.Done():
+			t.Errorf("context should not be done")
+		default:
+			if ctx.Err() != nil {
+				t.Errorf("unexpected error: %v; expected nil", ctx.Err())
+			}
+		}
+	})
+}

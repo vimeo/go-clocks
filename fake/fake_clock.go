@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	clocks "github.com/vimeo/go-clocks"
@@ -409,4 +410,40 @@ func (f *Clock) AwaitTimerAborts(n int) {
 // return.
 func (f *Clock) WaitAfterFuncs() {
 	f.cbsWG.Wait()
+}
+
+type deadlineContext struct {
+	context.Context
+	timedOut atomic.Bool
+	deadline time.Time
+}
+
+func (d *deadlineContext) Deadline() (time.Time, bool) {
+	return d.deadline, true
+}
+
+func (d *deadlineContext) Err() error {
+	if d.timedOut.Load() {
+		return context.DeadlineExceeded
+	}
+	return d.Context.Err()
+}
+
+// ContextWithDeadline behaves like context.WithDeadline, but it uses the
+// clock to determine the when the deadline has expired.
+func (c *Clock) ContextWithDeadline(ctx context.Context, t time.Time) (context.Context, context.CancelFunc) {
+	return c.ContextWithDeadlineCause(ctx, t, nil)
+}
+
+// ContextWithTimeout behaves like context.WithTimeout, but it uses the
+// clock to determine the when the timeout has elapsed.
+func (c *Clock) ContextWithTimeout(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc) {
+	return c.ContextWithDeadlineCause(ctx, c.Now().Add(d), nil)
+}
+
+// ContextWithTimeoutCause behaves like context.WithTimeoutCause, but it
+// uses the clock to determine the when the timeout has elapsed. Cause is
+// ignored in Go 1.20 and earlier.
+func (c *Clock) ContextWithTimeoutCause(ctx context.Context, d time.Duration, cause error) (context.Context, context.CancelFunc) {
+	return c.ContextWithDeadlineCause(ctx, c.Now().Add(d), cause)
 }
