@@ -104,3 +104,89 @@ func TestOffsetClock(t *testing.T) {
 		<-ch
 	}
 }
+
+func TestOffsetClockContext(t *testing.T) {
+	t.Run("ContextWithDeadlineExceeded", func(t *testing.T) {
+		base := time.Now()
+		inner := fake.NewClock(base)
+		c := NewOffsetClock(inner, time.Hour)
+
+		ctx, cancel := c.ContextWithDeadline(context.Background(), inner.Now().Add(time.Hour))
+		t.Cleanup(cancel)
+
+		awoken := inner.Advance(2 * time.Hour)
+		if awoken != 1 {
+			t.Errorf("unexpected number of awoken sleepers: %d; expected 1", awoken)
+		}
+
+		<-ctx.Done()
+		if ctx.Err() != context.DeadlineExceeded {
+			t.Errorf("unexpected error: %v; expected %v", ctx.Err(), context.DeadlineExceeded)
+		}
+	})
+
+	t.Run("ContextWithDeadlineNotExceeded", func(t *testing.T) {
+		base := time.Now()
+		inner := fake.NewClock(base)
+		c := NewOffsetClock(inner, time.Hour)
+
+		ctx, cancel := c.ContextWithDeadline(context.Background(), inner.Now().Add(time.Hour))
+		t.Cleanup(cancel)
+
+		awoken := inner.Advance(2*time.Hour - 1*time.Nanosecond)
+		if awoken != 0 {
+			t.Errorf("unexpected number of awoken sleepers: %d; expected 0", awoken)
+		}
+
+		select {
+		case <-ctx.Done():
+			t.Errorf("context should not be done")
+		default:
+			if ctx.Err() != nil {
+				t.Errorf("unexpected error: %v; expected nil", ctx.Err())
+			}
+		}
+	})
+
+	t.Run("ContextWithTimeoutExceeded", func(t *testing.T) {
+		base := time.Now()
+		inner := fake.NewClock(base)
+		c := NewOffsetClock(inner, time.Hour)
+
+		ctx, cancel := c.ContextWithTimeout(context.Background(), time.Hour)
+		t.Cleanup(cancel)
+
+		awoken := inner.Advance(time.Hour)
+		if awoken != 1 {
+			t.Errorf("unexpected number of awoken sleepers: %d; expected 1", awoken)
+		}
+
+		<-ctx.Done()
+		if ctx.Err() != context.DeadlineExceeded {
+			t.Errorf("unexpected error: %v; expected %v", ctx.Err(), context.DeadlineExceeded)
+		}
+	})
+
+	t.Run("ContextWithTimeouteNotExceeded", func(t *testing.T) {
+		base := time.Now()
+		inner := fake.NewClock(base)
+		c := NewOffsetClock(inner, time.Hour)
+
+		ctx, cancel := c.ContextWithTimeout(context.Background(), time.Hour)
+		t.Cleanup(cancel)
+
+		awoken := inner.Advance(time.Hour - time.Nanosecond)
+		if awoken != 0 {
+			t.Errorf("unexpected number of awoken sleepers: %d; expected 0", awoken)
+		}
+
+		select {
+		case <-ctx.Done():
+			t.Errorf("context should not be done")
+		default:
+			if ctx.Err() != nil {
+				t.Errorf("unexpected error: %v; expected nil", ctx.Err())
+			}
+		}
+	})
+}

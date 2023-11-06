@@ -49,6 +49,19 @@ func (o *Clock) AfterFunc(d time.Duration, f func()) clocks.StopTimer {
 	return o.inner.AfterFunc(d, f)
 }
 
+// ContextWithDeadline behaves like context.WithDeadline, but it uses the
+// clock to determine the when the deadline has expired.
+func (o *Clock) ContextWithDeadline(ctx context.Context, t time.Time) (context.Context, context.CancelFunc) {
+	return o.inner.ContextWithDeadline(ctx, t.Add(o.offset))
+}
+
+// ContextWithTimeout behaves like context.WithTimeout, but it uses the
+// clock to determine the when the timeout has elapsed.
+func (o *Clock) ContextWithTimeout(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc) {
+	// timeout is relative, so it doesn't need any adjustment
+	return o.inner.ContextWithTimeout(ctx, d)
+}
+
 // NewOffsetClock creates an OffsetClock. offset is added to all absolute times.
 func NewOffsetClock(inner clocks.Clock, offset time.Duration) *Clock {
 	return &Clock{

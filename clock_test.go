@@ -49,3 +49,63 @@ func TestDefaultClock(t *testing.T) {
 		<-afCh
 	}
 }
+
+func TestDefaultClockContext(t *testing.T) {
+	c := DefaultClock()
+
+	t.Run("ContextWithDeadlineExceeded", func(t *testing.T) {
+		base := c.Now()
+
+		ctx, cancel := c.ContextWithDeadline(context.Background(), base.Add(time.Millisecond))
+		t.Cleanup(cancel)
+
+		if v := c.SleepUntil(ctx, base.Add(time.Second)); v {
+			t.Errorf("unexpected return value: %t; expected false", v)
+		} else {
+			if ctx.Err() != context.DeadlineExceeded {
+				t.Errorf("unexpected error: %v; expected %v", ctx.Err(), context.DeadlineExceeded)
+			}
+		}
+	})
+
+	t.Run("ContextWithDeadlineNotExceeded", func(t *testing.T) {
+		base := c.Now()
+
+		ctx, cancel := c.ContextWithDeadline(context.Background(), base.Add(3*time.Second))
+		t.Cleanup(cancel)
+
+		if v := c.SleepUntil(ctx, base.Add(time.Millisecond)); !v {
+			t.Errorf("unexpected return value: %t; expected true", v)
+		} else {
+			if ctx.Err() != nil {
+				t.Errorf("unexpected error: %v; expected nil", ctx.Err())
+			}
+		}
+	})
+
+	t.Run("ContextWithTimeoutExceeded", func(t *testing.T) {
+		ctx, cancel := c.ContextWithTimeout(context.Background(), time.Millisecond)
+		t.Cleanup(cancel)
+
+		if v := c.SleepFor(ctx, time.Second); v {
+			t.Errorf("unexpected return value: %t; expected false", v)
+		} else {
+			if ctx.Err() != context.DeadlineExceeded {
+				t.Errorf("unexpected error: %v; expected %v", ctx.Err(), context.DeadlineExceeded)
+			}
+		}
+	})
+
+	t.Run("ContextWithTimeoutNotExceeded", func(t *testing.T) {
+		ctx, cancel := c.ContextWithTimeout(context.Background(), 3*time.Second)
+		t.Cleanup(cancel)
+
+		if v := c.SleepFor(ctx, time.Millisecond); !v {
+			t.Errorf("unexpected return value: %t; expected false", v)
+		} else {
+			if ctx.Err() != nil {
+				t.Errorf("unexpected error: %v; expected nil", ctx.Err())
+			}
+		}
+	})
+}
