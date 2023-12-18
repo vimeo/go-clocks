@@ -49,6 +49,12 @@ func (o *Clock) AfterFunc(d time.Duration, f func()) clocks.StopTimer {
 	return o.inner.AfterFunc(d, f)
 }
 
+// NewTimer returns a timer from the wrapped clock's [clocks.Clock.NewTimer].
+func (o *Clock) NewTimer(d time.Duration) clocks.Timer {
+	// relative time, so nothing to do here, just delegate on down.
+	return o.inner.NewTimer(d)
+}
+
 // ContextWithDeadline behaves like context.WithDeadline, but it uses the
 // clock to determine the when the deadline has expired.
 func (o *Clock) ContextWithDeadline(ctx context.Context, t time.Time) (context.Context, context.CancelFunc) {
@@ -69,3 +75,5 @@ func NewOffsetClock(inner clocks.Clock, offset time.Duration) *Clock {
 		offset: offset,
 	}
 }
+
+var _ clocks.Clock = (*Clock)(nil)

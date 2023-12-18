@@ -224,6 +224,272 @@ func TestFakeClockWithRelativeWaiter(t *testing.T) {
 	}
 }
 
+func TestFakeClockWithTimer(t *testing.T) {
+	t.Parallel()
+
+	baseTime := time.Now()
+	fc := NewClock(baseTime)
+
+	expectedTime := baseTime
+
+	if fn := fc.Now(); !fn.Equal(baseTime) {
+		t.Errorf("mismatched baseTime(%s) and unincremented Now()(%s)", baseTime, fn)
+	}
+	if wakers := fc.Advance(time.Minute); wakers != 0 {
+		t.Errorf("unexpected wakers from advancing 1 minute(%d); expected 0", wakers)
+	}
+	expectedTime = expectedTime.Add(time.Minute)
+
+	if fn := fc.Now(); !fn.Equal(expectedTime) {
+		t.Errorf("mismatched baseTime(%s) and unincremented Now()(%s)", expectedTime, fn)
+	}
+
+	sleeperWake := expectedTime.Add(time.Hour * 2)
+	timer := fc.NewTimer(time.Hour * 2)
+	ch := make(chan struct{})
+	go func() {
+		<-*timer.Ch()
+		ch <- struct{}{}
+	}()
+
+	fc.AwaitAggExtractedChans(1)
+
+	if sl := fc.NumSleepers(); sl != 0 {
+		t.Errorf("unexpected sleeper-count: %d; expected 0", sl)
+	}
+	if sl := fc.Sleepers(); len(sl) != 0 {
+		t.Errorf("unexpected sleeper-count: %d; expected 0", len(sl))
+	}
+
+	if as := fc.NumAggExtractedChans(); as != 1 {
+		t.Errorf("unexpected number of aggregate aggregate extracted channels: %d; expected 1", as)
+	}
+
+	if regTimers := fc.RegisteredTimers(); len(regTimers) != 1 {
+		t.Errorf("unexpected registered timer-count %d; %v", len(regTimers), regTimers)
+	}
+
+	// make sure we're still sleeping
+	select {
+	case <-ch:
+		t.Errorf("sleeper finished unexpectedly early")
+	default:
+	}
+
+	expectedTime = expectedTime.Add(time.Hour)
+	if wakers := fc.SetClock(expectedTime); wakers != 0 {
+		t.Errorf("unexpected wakers from advancing 1 hour(%d); expected 0", wakers)
+	}
+
+	// make sure we're still sleeping after the SetClock call
+	select {
+	case <-ch:
+		t.Errorf("sleeper finished unexpectedly early")
+	default:
+	}
+
+	fc.awaitExtractedChans(1)
+	// verify that our one sleeper is still sleeping
+	if sl := fc.numExtractedChans(); sl != 1 {
+		t.Errorf("unexpected extracted channel-count: %d; ", sl)
+	}
+
+	if regTimers := fc.RegisteredTimers(); len(regTimers) != 1 {
+		t.Errorf("unexpected registered timer-count %d; %v", len(regTimers), regTimers)
+	}
+
+	// advance to our wakeup point
+	expectedTime = sleeperWake
+	if wakers := fc.SetClock(sleeperWake); wakers != 1 {
+		t.Errorf("unexpected wakers from advancing 1 hour(%d); expected 1", wakers)
+	}
+
+	// wait for our sleeper to wake and return (expected true)
+	<-ch
+
+	if wu := fc.Wakeups(); wu != 0 {
+		t.Errorf("unexpected wakeup-count: %d; expected 0", wu)
+	}
+	if sa := fc.NumSleepAborts(); sa != 0 {
+		t.Errorf("unexpected sleep abort-count: %d; expected 0", sa)
+	}
+
+	if sa := fc.NumTimerAborts(); sa != 0 {
+		t.Errorf("unexpected timer abort-count: %d; expected 0", sa)
+	}
+}
+
+// Test that cancels a timer and advances the clock in parallel to guarantee that timer operations
+// are correctly synchronized. (mostly useful when run with -race)
+func TestFakeClockWithTimerStopRace(t *testing.T) {
+	t.Parallel()
+
+	baseTime := time.Now()
+	fc := NewClock(baseTime)
+	// Setup a channel for us to close when we're done and wake the sleeping goroutine.
+	testWakeCh := make(chan struct{})
+
+	sleeperWake := baseTime.Add(time.Hour * 2)
+	timer := fc.NewTimer(time.Hour * 2)
+	ch := make(chan struct{})
+	go func() {
+		select {
+		case <-*timer.Ch():
+		case <-testWakeCh:
+		}
+		ch <- struct{}{}
+	}()
+
+	fc.AwaitAggExtractedChans(1)
+
+	go timer.Stop()
+	go fc.SetClock(sleeperWake)
+
+	close(testWakeCh)
+
+	<-ch
+
+}
+
+func TestFakeClockWithTimerWithStop(t *testing.T) {
+	t.Parallel()
+
+	baseTime := time.Now()
+	fc := NewClock(baseTime)
+
+	expectedTime := baseTime
+
+	if fn := fc.Now(); !fn.Equal(baseTime) {
+		t.Errorf("mismatched baseTime(%s) and unincremented Now()(%s)", baseTime, fn)
+	}
+	if wakers := fc.Advance(time.Minute); wakers != 0 {
+		t.Errorf("unexpected wakers from advancing 1 minute(%d); expected 0", wakers)
+	}
+	expectedTime = expectedTime.Add(time.Minute)
+
+	if fn := fc.Now(); !fn.Equal(expectedTime) {
+		t.Errorf("mismatched baseTime(%s) and unincremented Now()(%s)", expectedTime, fn)
+	}
+
+	// Setup a channel for us to close when we're done and wake the sleeping goroutine.
+	testWakeCh := make(chan struct{})
+
+	sleeperWake := expectedTime.Add(time.Hour * 2)
+	timer := fc.NewTimer(time.Hour * 2)
+	ch := make(chan bool)
+	go func() {
+		select {
+		case <-*timer.Ch():
+			ch <- true
+		case <-testWakeCh:
+			ch <- false
+		}
+	}()
+
+	fc.AwaitAggExtractedChans(1)
+
+	if sl := fc.NumSleepers(); sl != 0 {
+		t.Errorf("unexpected sleeper-count: %d; expected 1", sl)
+	}
+	if sl := fc.Sleepers(); len(sl) != 0 {
+		t.Errorf("unexpected sleeper-count: %d; expected 1", len(sl))
+	}
+
+	if as := fc.NumAggExtractedChans(); as != 1 {
+		t.Errorf("unexpected number of aggregate aggregate extracted channels: %d; expected 1", as)
+	}
+
+	if regTimers := fc.RegisteredTimers(); len(regTimers) != 1 {
+		t.Errorf("unexpected registered timer-count %d; %v", len(regTimers), regTimers)
+	}
+
+	// make sure we're still sleeping
+	select {
+	case <-ch:
+		t.Errorf("sleeper finished unexpectedly early")
+	default:
+	}
+
+	// Set up a goroutine to awaken once we have an aborted timer (our call to .Stop() further down).
+	stopWaitRunning := make(chan struct{})
+	stopWaitCh := make(chan struct{})
+	go func() {
+		close(stopWaitRunning)
+		fc.AwaitTimerAborts(1)
+		stopWaitCh <- struct{}{}
+	}()
+	// Make sure that the goroutine calling AwaitTimerAborts is running before proceeding
+	<-stopWaitRunning
+
+	expectedTime = expectedTime.Add(time.Hour)
+	if wakers := fc.SetClock(expectedTime); wakers != 0 {
+		t.Errorf("unexpected wakers from advancing 1 hour(%d); expected 0", wakers)
+	}
+
+	// make sure we're still sleeping after the SetClock call
+	select {
+	case <-ch:
+		t.Errorf("sleeper finished unexpectedly early")
+	default:
+	}
+	select {
+	case <-stopWaitCh:
+		t.Errorf("timer abort watching goroutine awoke unexpectedly early (SetClock should not wake AwaitTimerAborts)")
+	default:
+	}
+
+	// verify that our one sleeper is still sleeping
+	if sl := fc.numExtractedChans(); sl != 1 {
+		t.Errorf("unexpected extracted channel-count: %d; ", sl)
+	}
+
+	if regTimers := fc.RegisteredTimers(); len(regTimers) != 1 {
+		t.Errorf("unexpected registered timer-count %d; %v", len(regTimers), regTimers)
+	}
+
+	if !timer.Stop() {
+		t.Errorf("Stop indicated it didn't prevent firing (false), the clock hasn't advanced far enough")
+	}
+
+	select {
+	case <-ch:
+		t.Errorf("sleeper finished unexpectedly early (Stop should not wake)")
+	default:
+	}
+
+	// wait for the timer aborts to wake up and finish
+	<-stopWaitCh
+
+	// advance to our wakeup point
+	expectedTime = sleeperWake
+	if wakers := fc.SetClock(sleeperWake); wakers != 0 {
+		t.Errorf("unexpected wakers from advancing 1 hour(%d); expected 0", wakers)
+	}
+
+	select {
+	case <-ch:
+		t.Errorf("stopped timer-based sleeper finished unexpectedly early")
+	default:
+	}
+
+	close(testWakeCh)
+	// wait for our sleeper to wake and return (expected true)
+	if wokeByTimer := <-ch; wokeByTimer {
+		t.Errorf("unexpected wake reason: timer fired, expected close of testWakeCh")
+	}
+
+	if wu := fc.Wakeups(); wu != 0 {
+		t.Errorf("unexpected wakeup-count: %d; expected 0", wu)
+	}
+	if sa := fc.NumSleepAborts(); sa != 0 {
+		t.Errorf("unexpected sleep abort-count: %d; expected 0", sa)
+	}
+
+	if sa := fc.NumTimerAborts(); sa != 1 {
+		t.Errorf("unexpected timer abort-count: %d; expected 1", sa)
+	}
+}
+
 func TestFakeClockWithRelativeWaiterWithCancel(t *testing.T) {
 	t.Parallel()
 
